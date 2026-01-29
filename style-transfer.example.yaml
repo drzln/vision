@@ -1,9 +1,18 @@
 # Style Transfer Pipeline Configuration
 # Finds visually superior references and applies their style to seed images
+#
+# Supported image sources:
+#   - google_images: Text-based search via Google Custom Search API
+#   - google_engine: Reverse image search / Google Lens (find similar images)
+#   - unsplash: High-quality curated photos (free: 50 req/hr demo, 5000/hr production)
+#   - pexels: Free stock photos (200 req/hr, 20,000/month)
+#   - kgiz: Custom KGIZ image service
+#   - local: Use images from a local directory
+#   - url_list: Predefined list of image URLs
 version: "1.0"
 
 app:
-  # Google Images API configuration (required for search)
+  # Google Images API configuration (required for google_images source)
   google_images:
     api_key: "${GOOGLE_API_KEY}"
     search_engine_id: "${GOOGLE_SEARCH_ENGINE_ID}"
@@ -16,66 +25,77 @@ app:
     api_key: "${KGIZ_API_KEY}"
     timeout: 60
 
+  # Note: Unsplash and Pexels API keys are configured per-pipeline in search config
+  # or via environment variables: UNSPLASH_ACCESS_KEY, PEXELS_API_KEY
+
   output_dir: ./output
   log_level: INFO
 
 pipelines:
-  # Example 1: Product Photo Enhancement
-  - name: product-hero-enhancement
+  # ==========================================================================
+  # Example 1: Google Images (text-based search)
+  # ==========================================================================
+  - name: product-google-images
     type: style_transfer
-    description: "Enhance product photos with professional studio aesthetics"
+    description: "Find professional product photos via Google Images search"
     enabled: true
-    tags: [product, hero, professional]
+    tags: [product, google-images]
     config:
-      # Input: Your seed image
       seed_image: ./input/product-raw.jpg
-      output_path: ./output/product-enhanced.png
+      output_path: ./output/product-google-enhanced.png
 
-      # Step 1: The Search
       search:
-        query: "professional product photography white background studio lighting"
+        source: google_images  # Text-based image search
+        query: "professional product photography white background studio"
         num_results: 8
-        vibe: professional  # professional, cinematic, minimalist, editorial, vibrant, moody, natural, studio
-        source: google
+        vibe: professional
         filter_min_resolution: 1024
 
-      # Step 2: The Refinement
+        # Google Images specific options
+        google_images:
+          safe_search: true
+          image_type: photo        # photo, clipart, lineart, animated
+          image_size: xlarge       # large, medium, icon, xlarge, xxlarge
+          dominant_color: white    # Filter by dominant color
+
       refinement:
-        strength: 0.65  # 0.0-1.0, how strongly to apply the style
+        strength: 0.65
         features:
           - soft_lighting
           - crisp_edges
           - color_grading
         preserve_identity: true
-        blend_mode: adaptive  # adaptive, overlay, soft_light
 
-      # Step 3: The Final Polish
       polish:
         enabled: true
         output_width: 2400
-        # output_height: null  # null = maintain aspect ratio
         sharpening: 0.35
-        denoise: true
 
-      # Debug options
-      save_intermediates: false
-      # intermediate_dir: ./output/debug
-
-  # Example 2: Cinematic Portrait
-  - name: cinematic-portrait
+  # ==========================================================================
+  # Example 2: Google Engine (reverse image search / Google Lens)
+  # ==========================================================================
+  - name: portrait-google-engine
     type: style_transfer
-    description: "Apply cinematic film look to portraits"
+    description: "Find visually similar portraits using reverse image search"
     enabled: true
-    tags: [portrait, cinematic, film]
+    tags: [portrait, google-engine, reverse-search]
     config:
       seed_image: ./input/portrait.jpg
-      output_path: ./output/portrait-cinematic.png
+      output_path: ./output/portrait-enhanced.png
 
       search:
-        query: "cinematic portrait photography film grain dramatic lighting"
-        num_results: 5
+        source: google_engine  # Reverse image search / Google Lens
+        query: ""  # Optional: filter results by keywords
+        num_results: 6
         vibe: cinematic
-        source: google
+
+        # Google Engine specific options
+        google_engine:
+          use_seed_image: true           # Use the seed image for reverse search
+          # reference_image: ./ref.jpg   # Or use a different reference
+          similarity_threshold: 0.75     # Minimum visual similarity (0.0-1.0)
+          include_similar_products: false
+          include_pages_with_image: true
 
       refinement:
         strength: 0.8
@@ -90,66 +110,249 @@ pipelines:
         enabled: true
         output_width: 1920
         sharpening: 0.2
-        denoise: false  # Keep film grain
 
-  # Example 3: Minimalist UI Screenshot
-  - name: ui-screenshot-clean
+  # ==========================================================================
+  # Example 3: KGIZ Service
+  # ==========================================================================
+  - name: artwork-kgiz
     type: style_transfer
-    description: "Clean up UI screenshots with minimalist aesthetic"
+    description: "Use KGIZ AI service for style-matched references"
     enabled: true
-    tags: [ui, screenshot, minimalist]
+    tags: [artwork, kgiz, ai]
     config:
-      seed_image: ./input/screenshot.png
-      output_path: ./output/screenshot-clean.png
+      seed_image: ./input/artwork.jpg
+      output_path: ./output/artwork-kgiz-enhanced.png
 
       search:
-        query: "minimalist UI design clean interface professional app screenshot"
+        source: kgiz  # KGIZ image service
+        query: "artistic photography style"
         num_results: 5
-        vibe: minimalist
-        source: google
+        vibe: editorial
+
+        # KGIZ specific options
+        kgiz:
+          model: "style-v2"       # KGIZ model to use
+          style_match: true       # Use style matching algorithm
+          category: landscape     # portrait, landscape, product, etc.
 
       refinement:
-        strength: 0.5
+        strength: 0.7
         features:
-          - crisp_edges
+          - color_grading
+          - texture_detail
           - high_contrast
-          - sharpness
         preserve_identity: true
-        blend_mode: overlay
 
       polish:
         enabled: true
-        output_width: 3840  # 4K
-        sharpening: 0.5
-        denoise: true
+        output_width: 3000
+        sharpening: 0.4
 
-  # Example 4: Moody Food Photography
-  - name: food-moody
+  # ==========================================================================
+  # Example 4: Unsplash (high-quality curated photos)
+  # ==========================================================================
+  - name: landscape-unsplash
     type: style_transfer
-    description: "Dark, moody aesthetic for food photography"
-    enabled: false  # Disabled by default
-    tags: [food, moody, dark]
+    description: "Find beautiful landscape references from Unsplash"
+    enabled: true
+    tags: [landscape, unsplash, free]
     config:
-      seed_image: ./input/food-raw.jpg
-      output_path: ./output/food-moody.png
+      seed_image: ./input/landscape.jpg
+      output_path: ./output/landscape-unsplash-enhanced.png
 
       search:
-        query: "dark moody food photography dramatic shadows rustic"
-        num_results: 6
-        vibe: moody
-        source: google
+        source: unsplash  # High-quality curated photos
+        query: "mountain landscape sunset"
+        num_results: 8
+        vibe: cinematic
+        filter_min_resolution: 1920
+
+        # Unsplash specific options
+        unsplash:
+          # access_key: "your-key-here"  # Or use UNSPLASH_ACCESS_KEY env var
+          orientation: landscape     # landscape, portrait, squarish
+          color: orange              # Filter by color tone
+          content_filter: high       # low (all) or high (safe)
 
       refinement:
-        strength: 0.75
+        strength: 0.7
         features:
+          - color_grading
           - dramatic_shadows
-          - texture_detail
+          - high_contrast
+        preserve_identity: true
+
+      polish:
+        enabled: true
+        output_width: 3840
+        sharpening: 0.3
+
+  # ==========================================================================
+  # Example 5: Pexels (free stock photos)
+  # ==========================================================================
+  - name: portrait-pexels
+    type: style_transfer
+    description: "Find portrait references from Pexels free stock"
+    enabled: true
+    tags: [portrait, pexels, free]
+    config:
+      seed_image: ./input/portrait.jpg
+      output_path: ./output/portrait-pexels-enhanced.png
+
+      search:
+        source: pexels  # Free stock photos (200 req/hr)
+        query: "professional portrait studio"
+        num_results: 10
+        vibe: studio
+        filter_min_resolution: 1080
+
+        # Pexels specific options
+        pexels:
+          # api_key: "your-key-here"  # Or use PEXELS_API_KEY env var
+          orientation: portrait      # landscape, portrait, square
+          size: large                # large, medium, small
+          color: white               # Filter by color
+
+      refinement:
+        strength: 0.65
+        features:
+          - soft_lighting
+          - smooth_skin
           - color_grading
         preserve_identity: true
-        blend_mode: adaptive
+        blend_mode: soft_light
+
+      polish:
+        enabled: true
+        output_width: 2400
+        sharpening: 0.25
+
+  # ==========================================================================
+  # Example 6: Local Directory Source
+  # ==========================================================================
+  - name: batch-from-local
+    type: style_transfer
+    description: "Use reference images from a local directory"
+    enabled: true
+    tags: [local, batch]
+    config:
+      seed_image: ./input/photo.jpg
+      output_path: ./output/photo-local-styled.png
+
+      search:
+        source: local  # Local directory
+        query: ""  # Not used for local source
+        num_results: 5
+        vibe: natural
+
+        # Local source specific options
+        local:
+          directory: ./references/nature-photos
+          patterns:
+            - "*.jpg"
+            - "*.jpeg"
+            - "*.png"
+            - "*.webp"
+          recursive: true          # Search subdirectories
+          sort_by: modified        # modified, name, random
+
+      refinement:
+        strength: 0.6
+        features:
+          - soft_lighting
+          - color_grading
+        preserve_identity: true
 
       polish:
         enabled: true
         output_width: 2048
         sharpening: 0.3
+
+  # ==========================================================================
+  # Example 7: URL List Source
+  # ==========================================================================
+  - name: curated-references
+    type: style_transfer
+    description: "Use a curated list of reference image URLs"
+    enabled: true
+    tags: [curated, urls]
+    config:
+      seed_image: ./input/subject.jpg
+      output_path: ./output/subject-curated-styled.png
+
+      search:
+        source: url_list  # Predefined URLs
+        num_results: 4
+        vibe: studio
+
+        # URL list specific options
+        url_list:
+          urls:
+            - "https://example.com/reference1.jpg"
+            - "https://example.com/reference2.jpg"
+            - "https://example.com/reference3.jpg"
+            - "https://example.com/reference4.jpg"
+            - "https://example.com/reference5.jpg"
+          shuffle: false  # Randomize order
+
+      refinement:
+        strength: 0.75
+        features:
+          - soft_lighting
+          - crisp_edges
+          - sharpness
+        preserve_identity: true
+        blend_mode: adaptive
+
+      polish:
+        enabled: true
+        output_width: 2400
+        sharpening: 0.35
         denoise: true
+
+  # ==========================================================================
+  # Example 8: Combined workflow - Google Engine then refine
+  # ==========================================================================
+  - name: advanced-portrait-workflow
+    type: style_transfer
+    description: "Find similar high-end portraits, apply cinematic style"
+    enabled: false  # Disabled by default
+    tags: [portrait, advanced, cinematic]
+    config:
+      seed_image: ./input/headshot.jpg
+      output_path: ./output/headshot-cinematic.png
+
+      search:
+        # Use Google Engine to find visually similar professional portraits
+        source: google_engine
+        query: "professional headshot portrait"  # Filter similar images by keywords
+        num_results: 10
+        vibe: cinematic
+        filter_min_resolution: 1500
+
+        google_engine:
+          use_seed_image: true
+          similarity_threshold: 0.8
+          include_similar_products: false
+          include_pages_with_image: true
+
+      refinement:
+        strength: 0.85
+        features:
+          - smooth_skin
+          - dramatic_shadows
+          - color_grading
+          - bokeh
+        preserve_identity: true
+        blend_mode: soft_light
+
+      polish:
+        enabled: true
+        output_width: 3000
+        output_height: null  # Maintain aspect ratio
+        sharpening: 0.25
+        denoise: true
+
+      # Debug options
+      save_intermediates: true
+      intermediate_dir: ./output/debug/headshot

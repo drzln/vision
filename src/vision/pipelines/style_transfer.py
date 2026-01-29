@@ -29,6 +29,31 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
+class ImageSource(str, Enum):
+    """Available image search sources."""
+
+    # Google Custom Search API - text-based image search
+    GOOGLE_IMAGES = "google_images"
+
+    # Google Cloud Vision API - reverse image search / find similar
+    GOOGLE_ENGINE = "google_engine"
+
+    # Unsplash API - high-quality curated photos (free tier: 50 req/hr)
+    UNSPLASH = "unsplash"
+
+    # Pexels API - free stock photos (200 req/hr)
+    PEXELS = "pexels"
+
+    # KGIZ service - custom image processing service
+    KGIZ = "kgiz"
+
+    # Local directory - use images from a local folder as references
+    LOCAL = "local"
+
+    # URL list - fetch from a predefined list of URLs
+    URL_LIST = "url_list"
+
+
 class SearchVibe(str, Enum):
     """Visual style/vibe for reference search."""
 
@@ -56,15 +81,177 @@ class StyleFeature(str, Enum):
     SHARPNESS = "sharpness"
 
 
-class SearchConfig(BaseModel):
-    """Configuration for Step 1: The Search."""
+class GoogleImagesSourceConfig(BaseModel):
+    """Configuration for Google Custom Search API source."""
 
-    query: str = Field(description="Search query to find reference images")
-    num_results: int = Field(default=5, ge=1, le=20, description="Number of reference images to fetch")
-    vibe: SearchVibe = Field(default=SearchVibe.PROFESSIONAL, description="Visual style/vibe to search for")
-    source: str = Field(default="google", description="Image search source (google, kgiz)")
+    # Uses app.google_images credentials from VisionConfig
+    safe_search: bool = Field(default=True, description="Enable safe search filtering")
+    image_type: str | None = Field(
+        default=None, description="Filter by image type: photo, clipart, lineart, animated"
+    )
+    image_size: str | None = Field(
+        default=None, description="Filter by size: large, medium, icon, xlarge, xxlarge"
+    )
+    dominant_color: str | None = Field(
+        default=None, description="Filter by dominant color: black, blue, brown, gray, green, etc."
+    )
+
+
+class GoogleEngineSourceConfig(BaseModel):
+    """Configuration for Google Lens / reverse image search source.
+
+    Uses the seed image to find visually similar images, then filters
+    by the query and vibe to select the best references.
+    """
+
+    use_seed_image: bool = Field(
+        default=True, description="Use seed image for reverse search (recommended)"
+    )
+    reference_image: Path | None = Field(
+        default=None, description="Alternative reference image for reverse search"
+    )
+    similarity_threshold: float = Field(
+        default=0.7, ge=0.0, le=1.0, description="Minimum visual similarity score"
+    )
+    include_similar_products: bool = Field(
+        default=False, description="Include visually similar products in results"
+    )
+    include_pages_with_image: bool = Field(
+        default=True, description="Include pages containing the image"
+    )
+
+
+class KgizSourceConfig(BaseModel):
+    """Configuration for KGIZ image service source."""
+
+    # Uses app.kgiz credentials from VisionConfig
+    model: str = Field(default="default", description="KGIZ model to use for search")
+    style_match: bool = Field(
+        default=True, description="Use style matching algorithm"
+    )
+    category: str | None = Field(
+        default=None, description="Category filter (portrait, landscape, product, etc.)"
+    )
+
+
+class UnsplashSourceConfig(BaseModel):
+    """Configuration for Unsplash API source.
+
+    Requires UNSPLASH_ACCESS_KEY environment variable or app config.
+    Free tier: 50 requests/hour (demo), 5000 requests/hour (production).
+    """
+
+    access_key: str | None = Field(
+        default=None, description="Unsplash API access key (or use env UNSPLASH_ACCESS_KEY)"
+    )
+    orientation: str | None = Field(
+        default=None, description="Filter: landscape, portrait, squarish"
+    )
+    color: str | None = Field(
+        default=None,
+        description="Filter by color: black_and_white, black, white, yellow, "
+        "orange, red, purple, magenta, green, teal, blue",
+    )
+    content_filter: str = Field(
+        default="high", description="Content filter: low (all), high (safe)"
+    )
+
+
+class PexelsSourceConfig(BaseModel):
+    """Configuration for Pexels API source.
+
+    Requires PEXELS_API_KEY environment variable or app config.
+    Free tier: 200 requests/hour, 20,000 requests/month.
+    """
+
+    api_key: str | None = Field(
+        default=None, description="Pexels API key (or use env PEXELS_API_KEY)"
+    )
+    orientation: str | None = Field(
+        default=None, description="Filter: landscape, portrait, square"
+    )
+    size: str | None = Field(
+        default=None, description="Filter: large, medium, small"
+    )
+    color: str | None = Field(
+        default=None,
+        description="Filter by color: red, orange, yellow, green, turquoise, "
+        "blue, violet, pink, brown, black, gray, white",
+    )
+
+
+class LocalSourceConfig(BaseModel):
+    """Configuration for local directory source."""
+
+    directory: Path = Field(description="Path to directory containing reference images")
+    patterns: list[str] = Field(
+        default_factory=lambda: ["*.jpg", "*.jpeg", "*.png", "*.webp"],
+        description="File patterns to match",
+    )
+    recursive: bool = Field(default=False, description="Search subdirectories")
+    sort_by: str = Field(
+        default="modified", description="Sort order: modified, name, random"
+    )
+
+
+class UrlListSourceConfig(BaseModel):
+    """Configuration for URL list source."""
+
+    urls: list[str] = Field(description="List of image URLs to use as references")
+    shuffle: bool = Field(default=False, description="Randomize URL order")
+
+
+class SearchConfig(BaseModel):
+    """Configuration for Step 1: The Search.
+
+    Supports multiple image sources:
+    - google_images: Text-based search via Google Custom Search API
+    - google_engine: Reverse image search via Google Cloud Vision API
+    - unsplash: High-quality curated photos (free, 50 req/hr demo)
+    - pexels: Free stock photos (200 req/hr)
+    - kgiz: Custom KGIZ image service
+    - local: Images from a local directory
+    - url_list: Predefined list of image URLs
+    """
+
+    query: str = Field(
+        default="",
+        description="Search query (required for most sources)",
+    )
+    num_results: int = Field(
+        default=5, ge=1, le=20, description="Number of reference images to fetch"
+    )
+    vibe: SearchVibe = Field(
+        default=SearchVibe.PROFESSIONAL, description="Visual style/vibe to search for"
+    )
+    source: ImageSource = Field(
+        default=ImageSource.UNSPLASH, description="Image search source"
+    )
     filter_min_resolution: int = Field(
         default=1024, ge=256, description="Minimum resolution for reference images"
+    )
+
+    # Source-specific configurations (only one should be set based on source)
+    google_images: GoogleImagesSourceConfig | None = Field(
+        default=None, description="Google Images source configuration"
+    )
+    google_engine: GoogleEngineSourceConfig | None = Field(
+        default=None, description="Google Engine/Lens source configuration"
+    )
+    unsplash: UnsplashSourceConfig | None = Field(
+        default=None, description="Unsplash API source configuration"
+    )
+    pexels: PexelsSourceConfig | None = Field(
+        default=None, description="Pexels API source configuration"
+    )
+    kgiz: KgizSourceConfig | None = Field(
+        default=None, description="KGIZ source configuration"
+    )
+    local: LocalSourceConfig | None = Field(
+        default=None, description="Local directory source configuration"
+    )
+    url_list: UrlListSourceConfig | None = Field(
+        default=None, description="URL list source configuration"
     )
 
 
@@ -107,7 +294,9 @@ class StyleTransferPipelineConfig(BaseModel):
     refinement: RefinementConfig = Field(
         default_factory=RefinementConfig, description="Style refinement configuration"
     )
-    polish: PolishConfig = Field(default_factory=PolishConfig, description="Final polish configuration")
+    polish: PolishConfig = Field(
+        default_factory=PolishConfig, description="Final polish configuration"
+    )
     save_intermediates: bool = Field(
         default=False, description="Save intermediate results for debugging"
     )
@@ -476,9 +665,41 @@ class StyleTransferPipeline(Pipeline):
     async def _search_references(self, config: SearchConfig) -> list[SearchResult]:
         """Search for reference images based on configuration.
 
-        This is a placeholder - implement with actual Google Images / KGIZ API.
+        Dispatches to the appropriate source handler based on config.source.
         """
-        self._logger.debug("Searching with source: %s", config.source)
+        self._logger.info("  Source: %s", config.source.value)
+
+        # Dispatch to source-specific handler
+        match config.source:
+            case ImageSource.GOOGLE_IMAGES:
+                return await self._search_google_images(config)
+            case ImageSource.GOOGLE_ENGINE:
+                return await self._search_google_engine(config)
+            case ImageSource.UNSPLASH:
+                return await self._search_unsplash(config)
+            case ImageSource.PEXELS:
+                return await self._search_pexels(config)
+            case ImageSource.KGIZ:
+                return await self._search_kgiz(config)
+            case ImageSource.LOCAL:
+                return await self._search_local(config)
+            case ImageSource.URL_LIST:
+                return await self._search_url_list(config)
+            case _:
+                msg = f"Unknown image source: {config.source}"
+                raise ValueError(msg)
+
+    async def _search_google_images(self, config: SearchConfig) -> list[SearchResult]:
+        """Search using Google Custom Search API (text-based image search).
+
+        Requires app.google_images configuration with API key and search engine ID.
+        API docs: https://developers.google.com/custom-search/v1/reference/rest/v1/cse/list
+        """
+        import os
+
+        import httpx
+
+        self._logger.debug("Searching Google Images with query: %s", config.query)
 
         # Build enhanced query with vibe
         vibe_modifiers = {
@@ -492,21 +713,640 @@ class StyleTransferPipeline(Pipeline):
             SearchVibe.STUDIO: "studio lighting professional",
         }
 
-        enhanced_query = f"{config.query} {vibe_modifiers.get(config.vibe, '')}"
-        self._logger.debug("Enhanced query: %s", enhanced_query)
+        enhanced_query = f"{config.query} {vibe_modifiers.get(config.vibe, '')}".strip()
+        self._logger.debug("  Enhanced query: %s", enhanced_query)
 
-        # Placeholder results - replace with actual API calls
-        # TODO: Integrate with Google Custom Search API or KGIZ
-        await asyncio.sleep(0.1)  # Simulate API call
+        # Get source-specific config
+        source_config = config.google_images or GoogleImagesSourceConfig()
+
+        # Get API credentials from app config or environment
+        api_key = None
+        search_engine_id = None
+
+        if self._config and self._config.app.google_images:
+            api_key = self._config.app.google_images.api_key
+            search_engine_id = self._config.app.google_images.search_engine_id
+
+        # Fall back to environment variables (with ${VAR} expansion support)
+        if not api_key or api_key.startswith("${"):
+            api_key = os.environ.get("GOOGLE_API_KEY")
+        if not search_engine_id or search_engine_id.startswith("${"):
+            search_engine_id = os.environ.get("GOOGLE_SEARCH_ENGINE_ID")
+
+        if not api_key:
+            msg = "Google API key required. Set GOOGLE_API_KEY env var or app.google_images.api_key"
+            raise ValueError(msg)
+        if not search_engine_id:
+            msg = (
+                "Google Search Engine ID required. Set GOOGLE_SEARCH_ENGINE_ID "
+                "env var or app.google_images.search_engine_id"
+            )
+            raise ValueError(msg)
+
+        # Build request parameters
+        params: dict[str, str | int] = {
+            "key": api_key,
+            "cx": search_engine_id,
+            "q": enhanced_query,
+            "searchType": "image",
+            "num": min(config.num_results, 10),  # API max is 10
+            "safe": "active" if source_config.safe_search else "off",
+        }
+
+        if source_config.image_type:
+            params["imgType"] = source_config.image_type
+        if source_config.image_size:
+            params["imgSize"] = source_config.image_size
+        if source_config.dominant_color:
+            params["imgDominantColor"] = source_config.dominant_color
+
+        # Make API request
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                "https://www.googleapis.com/customsearch/v1",
+                params=params,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        # Parse results
+        results: list[SearchResult] = []
+        items = data.get("items", [])
+
+        for i, item in enumerate(items):
+            image_info = item.get("image", {})
+            width = image_info.get("width", 0)
+            height = image_info.get("height", 0)
+
+            # Filter by minimum resolution
+            if width < config.filter_min_resolution and height < config.filter_min_resolution:
+                self._logger.debug("  Skipping low-res image: %dx%d", width, height)
+                continue
+
+            results.append(
+                SearchResult(
+                    url=item.get("link", ""),
+                    score=1.0 - (i * 0.05),  # Decay score by position
+                    resolution=(width, height),
+                    metadata={
+                        "source": "google_images",
+                        "vibe": config.vibe.value,
+                        "query": enhanced_query,
+                        "title": item.get("title", ""),
+                        "context_link": item.get("image", {}).get("contextLink", ""),
+                        "thumbnail": item.get("image", {}).get("thumbnailLink", ""),
+                    },
+                )
+            )
+
+        self._logger.debug("  Retrieved %d images from Google Custom Search", len(results))
+        return results
+
+    async def _search_google_engine(self, config: SearchConfig) -> list[SearchResult]:
+        """Search using Google Cloud Vision API WEB_DETECTION (reverse image search).
+
+        Finds visually similar images based on the seed image.
+        API docs: https://cloud.google.com/vision/docs/detecting-web
+        """
+        import base64
+        import os
+
+        import httpx
+
+        source_config = config.google_engine or GoogleEngineSourceConfig()
+
+        # Determine which image to use for reverse search
+        if source_config.use_seed_image:
+            self._logger.debug("  Using seed image for reverse search")
+            reference_path = self._pipeline_config.seed_image if self._pipeline_config else None
+        else:
+            reference_path = source_config.reference_image
+            self._logger.debug("  Using reference image: %s", reference_path)
+
+        if not reference_path or not reference_path.exists():
+            msg = f"Reference image not found: {reference_path}"
+            raise FileNotFoundError(msg)
+
+        self._logger.debug("  Similarity threshold: %.2f", source_config.similarity_threshold)
+        self._logger.debug("  Include similar products: %s", source_config.include_similar_products)
+
+        # Get API key from app config or environment
+        api_key = None
+        if self._config and self._config.app.google_images:
+            api_key = self._config.app.google_images.api_key
+
+        if not api_key or api_key.startswith("${"):
+            api_key = os.environ.get("GOOGLE_API_KEY")
+
+        if not api_key:
+            msg = "Google API key required. Set GOOGLE_API_KEY env var or app.google_images.api_key"
+            raise ValueError(msg)
+
+        # Read and encode the reference image as base64
+        with open(reference_path, "rb") as f:
+            image_content = base64.b64encode(f.read()).decode("utf-8")
+
+        # Build the Vision API request
+        request_body = {
+            "requests": [
+                {
+                    "image": {"content": image_content},
+                    "features": [
+                        {
+                            "type": "WEB_DETECTION",
+                            "maxResults": config.num_results * 2,  # Request more to filter
+                        }
+                    ],
+                }
+            ]
+        }
+
+        # Make API request
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"https://vision.googleapis.com/v1/images:annotate?key={api_key}",
+                json=request_body,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        # Parse results from web detection
+        results: list[SearchResult] = []
+        responses = data.get("responses", [])
+
+        if not responses:
+            self._logger.warning("  No responses from Vision API")
+            return results
+
+        web_detection = responses[0].get("webDetection", {})
+
+        # Collect visually similar images
+        similar_images = web_detection.get("visuallySimilarImages", [])
+        for i, img in enumerate(similar_images):
+            url = img.get("url", "")
+            score = img.get("score", 0.8 - (i * 0.05))
+
+            # Filter by similarity threshold
+            if score < source_config.similarity_threshold:
+                continue
+
+            results.append(
+                SearchResult(
+                    url=url,
+                    score=score,
+                    resolution=(0, 0),  # Not provided by API
+                    metadata={
+                        "source": "google_engine",
+                        "type": "visually_similar",
+                        "vibe": config.vibe.value,
+                    },
+                )
+            )
+
+        # Optionally include pages with matching images
+        if source_config.include_pages_with_image:
+            pages = web_detection.get("pagesWithMatchingImages", [])
+            for page in pages[:config.num_results]:
+                # Get full matching images from pages
+                full_images = page.get("fullMatchingImages", [])
+                partial_images = page.get("partialMatchingImages", [])
+
+                for img in full_images + partial_images:
+                    url = img.get("url", "")
+                    if url and not any(r.url == url for r in results):
+                        results.append(
+                            SearchResult(
+                                url=url,
+                                score=0.85,  # High score for page matches
+                                resolution=(0, 0),
+                                metadata={
+                                    "source": "google_engine",
+                                    "type": "page_match",
+                                    "page_url": page.get("url", ""),
+                                    "page_title": page.get("pageTitle", ""),
+                                    "vibe": config.vibe.value,
+                                },
+                            )
+                        )
+
+        # Optionally include similar products
+        if source_config.include_similar_products:
+            products = web_detection.get("visuallySimilarProducts", []) or web_detection.get(
+                "productSearchResults", []
+            )
+            for product in products[:config.num_results]:
+                url = product.get("image", {}).get("url", "") or product.get("url", "")
+                if url and not any(r.url == url for r in results):
+                    results.append(
+                        SearchResult(
+                            url=url,
+                            score=0.75,
+                            resolution=(0, 0),
+                            metadata={
+                                "source": "google_engine",
+                                "type": "similar_product",
+                                "vibe": config.vibe.value,
+                            },
+                        )
+                    )
+
+        # Limit to requested number
+        results = results[: config.num_results]
+        self._logger.debug("  Retrieved %d similar images from Vision API", len(results))
+        return results
+
+    async def _search_kgiz(self, config: SearchConfig) -> list[SearchResult]:
+        """Search using KGIZ image service.
+
+        Requires app.kgiz configuration with endpoint and API key.
+        """
+        import os
+
+        import httpx
+
+        source_config = config.kgiz or KgizSourceConfig()
+
+        self._logger.debug("  KGIZ model: %s", source_config.model)
+        self._logger.debug("  Style match: %s", source_config.style_match)
+        if source_config.category:
+            self._logger.debug("  Category: %s", source_config.category)
+
+        # Get KGIZ credentials from app config or environment
+        endpoint = None
+        api_key = None
+
+        if self._config and self._config.app.kgiz:
+            endpoint = self._config.app.kgiz.endpoint
+            api_key = self._config.app.kgiz.api_key
+
+        if not endpoint or endpoint.startswith("${"):
+            endpoint = os.environ.get("KGIZ_ENDPOINT")
+        if not api_key or api_key.startswith("${"):
+            api_key = os.environ.get("KGIZ_API_KEY")
+
+        if not endpoint:
+            msg = "KGIZ endpoint required. Set KGIZ_ENDPOINT env var or app.kgiz.endpoint"
+            raise ValueError(msg)
+        if not api_key:
+            msg = "KGIZ API key required. Set KGIZ_API_KEY env var or app.kgiz.api_key"
+            raise ValueError(msg)
+
+        # Build request body
+        request_body = {
+            "query": config.query,
+            "vibe": config.vibe.value,
+            "model": source_config.model,
+            "style_match": source_config.style_match,
+            "limit": config.num_results,
+            "min_resolution": config.filter_min_resolution,
+        }
+
+        if source_config.category:
+            request_body["category"] = source_config.category
+
+        # Make API request
+        timeout = self._config.app.kgiz.timeout if self._config and self._config.app.kgiz else 30
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                f"{endpoint.rstrip('/')}/v1/search",
+                json=request_body,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        # Parse results
+        results: list[SearchResult] = []
+        items = data.get("results", data.get("images", []))
+
+        for i, item in enumerate(items):
+            url = item.get("url", item.get("image_url", ""))
+            width = item.get("width", 0)
+            height = item.get("height", 0)
+            score = item.get("score", item.get("relevance", 0.9 - (i * 0.05)))
+
+            if not url:
+                continue
+
+            results.append(
+                SearchResult(
+                    url=url,
+                    score=score,
+                    resolution=(width, height),
+                    metadata={
+                        "source": "kgiz",
+                        "model": source_config.model,
+                        "vibe": config.vibe.value,
+                        "id": item.get("id", ""),
+                        "category": item.get("category", source_config.category),
+                    },
+                )
+            )
+
+        self._logger.debug("  Retrieved %d images from KGIZ", len(results))
+        return results
+
+    async def _search_unsplash(self, config: SearchConfig) -> list[SearchResult]:
+        """Search using Unsplash API.
+
+        Requires UNSPLASH_ACCESS_KEY environment variable or config.
+        API docs: https://unsplash.com/documentation#search-photos
+        Free tier: 50 requests/hour (demo), 5000 requests/hour (production).
+        """
+        import os
+
+        import httpx
+
+        source_config = config.unsplash or UnsplashSourceConfig()
+
+        # Get access key from config or environment
+        access_key = source_config.access_key
+        if not access_key or access_key.startswith("${"):
+            access_key = os.environ.get("UNSPLASH_ACCESS_KEY")
+
+        if not access_key:
+            msg = (
+                "Unsplash access key required. Set UNSPLASH_ACCESS_KEY "
+                "env var or search.unsplash.access_key"
+            )
+            raise ValueError(msg)
+
+        # Build enhanced query with vibe
+        vibe_modifiers = {
+            SearchVibe.PROFESSIONAL: "professional",
+            SearchVibe.CINEMATIC: "cinematic film",
+            SearchVibe.MINIMALIST: "minimalist clean",
+            SearchVibe.EDITORIAL: "editorial magazine",
+            SearchVibe.VIBRANT: "vibrant colorful",
+            SearchVibe.MOODY: "moody dark",
+            SearchVibe.NATURAL: "natural organic",
+            SearchVibe.STUDIO: "studio lighting",
+        }
+
+        enhanced_query = f"{config.query} {vibe_modifiers.get(config.vibe, '')}".strip()
+        self._logger.debug("  Unsplash query: %s", enhanced_query)
+
+        # Build request parameters
+        params: dict[str, str | int] = {
+            "query": enhanced_query,
+            "per_page": min(config.num_results, 30),  # API max is 30
+            "content_filter": source_config.content_filter,
+        }
+
+        if source_config.orientation:
+            params["orientation"] = source_config.orientation
+        if source_config.color:
+            params["color"] = source_config.color
+
+        # Make API request
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                "https://api.unsplash.com/search/photos",
+                params=params,
+                headers={
+                    "Authorization": f"Client-ID {access_key}",
+                    "Accept-Version": "v1",
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        # Parse results
+        results: list[SearchResult] = []
+        photos = data.get("results", [])
+
+        for i, photo in enumerate(photos):
+            urls = photo.get("urls", {})
+            # Prefer 'regular' size (1080px width) or 'full' for high quality
+            url = urls.get("regular", urls.get("full", urls.get("raw", "")))
+
+            width = photo.get("width", 0)
+            height = photo.get("height", 0)
+
+            # Filter by minimum resolution
+            if width < config.filter_min_resolution and height < config.filter_min_resolution:
+                self._logger.debug("  Skipping low-res image: %dx%d", width, height)
+                continue
+
+            results.append(
+                SearchResult(
+                    url=url,
+                    score=1.0 - (i * 0.03),  # Decay by position
+                    resolution=(width, height),
+                    metadata={
+                        "source": "unsplash",
+                        "vibe": config.vibe.value,
+                        "id": photo.get("id", ""),
+                        "description": photo.get("description", ""),
+                        "alt_description": photo.get("alt_description", ""),
+                        "user": photo.get("user", {}).get("name", ""),
+                        "download_link": photo.get("links", {}).get("download", ""),
+                        "color": photo.get("color", ""),
+                    },
+                )
+            )
+
+        self._logger.debug("  Retrieved %d images from Unsplash", len(results))
+        return results
+
+    async def _search_pexels(self, config: SearchConfig) -> list[SearchResult]:
+        """Search using Pexels API.
+
+        Requires PEXELS_API_KEY environment variable or config.
+        API docs: https://www.pexels.com/api/documentation/#photos-search
+        Free tier: 200 requests/hour, 20,000 requests/month.
+        """
+        import os
+
+        import httpx
+
+        source_config = config.pexels or PexelsSourceConfig()
+
+        # Get API key from config or environment
+        api_key = source_config.api_key
+        if not api_key or api_key.startswith("${"):
+            api_key = os.environ.get("PEXELS_API_KEY")
+
+        if not api_key:
+            msg = "Pexels API key required. Set PEXELS_API_KEY env var or search.pexels.api_key"
+            raise ValueError(msg)
+
+        # Build enhanced query with vibe
+        vibe_modifiers = {
+            SearchVibe.PROFESSIONAL: "professional",
+            SearchVibe.CINEMATIC: "cinematic",
+            SearchVibe.MINIMALIST: "minimalist",
+            SearchVibe.EDITORIAL: "editorial",
+            SearchVibe.VIBRANT: "vibrant colorful",
+            SearchVibe.MOODY: "moody atmospheric",
+            SearchVibe.NATURAL: "natural",
+            SearchVibe.STUDIO: "studio",
+        }
+
+        enhanced_query = f"{config.query} {vibe_modifiers.get(config.vibe, '')}".strip()
+        self._logger.debug("  Pexels query: %s", enhanced_query)
+
+        # Build request parameters
+        params: dict[str, str | int] = {
+            "query": enhanced_query,
+            "per_page": min(config.num_results, 80),  # API max is 80
+        }
+
+        if source_config.orientation:
+            params["orientation"] = source_config.orientation
+        if source_config.size:
+            params["size"] = source_config.size
+        if source_config.color:
+            params["color"] = source_config.color
+
+        # Make API request
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                "https://api.pexels.com/v1/search",
+                params=params,
+                headers={
+                    "Authorization": api_key,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        # Parse results
+        results: list[SearchResult] = []
+        photos = data.get("photos", [])
+
+        for i, photo in enumerate(photos):
+            src = photo.get("src", {})
+            # Prefer 'large2x' (940x650 or larger) or 'original' for high quality
+            url = src.get("large2x", src.get("original", src.get("large", "")))
+
+            width = photo.get("width", 0)
+            height = photo.get("height", 0)
+
+            # Filter by minimum resolution
+            if width < config.filter_min_resolution and height < config.filter_min_resolution:
+                self._logger.debug("  Skipping low-res image: %dx%d", width, height)
+                continue
+
+            results.append(
+                SearchResult(
+                    url=url,
+                    score=1.0 - (i * 0.03),  # Decay by position
+                    resolution=(width, height),
+                    metadata={
+                        "source": "pexels",
+                        "vibe": config.vibe.value,
+                        "id": photo.get("id", ""),
+                        "photographer": photo.get("photographer", ""),
+                        "photographer_url": photo.get("photographer_url", ""),
+                        "avg_color": photo.get("avg_color", ""),
+                        "alt": photo.get("alt", ""),
+                    },
+                )
+            )
+
+        self._logger.debug("  Retrieved %d images from Pexels", len(results))
+        return results
+
+    async def _search_local(self, config: SearchConfig) -> list[SearchResult]:
+        """Search for reference images in a local directory."""
+        source_config = config.local
+        if source_config is None:
+            msg = "Local source requires 'local' configuration"
+            raise ValueError(msg)
+
+        self._logger.debug("  Directory: %s", source_config.directory)
+        self._logger.debug("  Patterns: %s", source_config.patterns)
+        self._logger.debug("  Recursive: %s", source_config.recursive)
+
+        if not source_config.directory.exists():
+            msg = f"Local directory not found: {source_config.directory}"
+            raise FileNotFoundError(msg)
+
+        # Find matching files
+        import random
+        from glob import glob
+
+        all_files: list[Path] = []
+        for pattern in source_config.patterns:
+            if source_config.recursive:
+                matches = glob(str(source_config.directory / "**" / pattern), recursive=True)
+            else:
+                matches = glob(str(source_config.directory / pattern))
+            all_files.extend(Path(m) for m in matches)
+
+        # Sort files
+        match source_config.sort_by:
+            case "modified":
+                all_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+            case "name":
+                all_files.sort(key=lambda p: p.name)
+            case "random":
+                random.shuffle(all_files)
+
+        # Limit to requested number
+        selected_files = all_files[: config.num_results]
+        self._logger.info("  Found %d local reference images", len(selected_files))
+
+        # Build results
+        results = []
+        for i, file_path in enumerate(selected_files):
+            # Get image resolution
+            try:
+                from PIL import Image as PILImage
+
+                with PILImage.open(file_path) as img:
+                    resolution = img.size
+            except Exception:
+                resolution = (0, 0)
+
+            results.append(
+                SearchResult(
+                    url=f"file://{file_path.absolute()}",
+                    score=1.0 - (i * 0.02),  # Slight decay by order
+                    resolution=resolution,
+                    metadata={
+                        "source": "local",
+                        "path": str(file_path),
+                        "vibe": config.vibe.value,
+                    },
+                )
+            )
+
+        return results
+
+    async def _search_url_list(self, config: SearchConfig) -> list[SearchResult]:
+        """Use a predefined list of URLs as reference images."""
+        source_config = config.url_list
+        if source_config is None:
+            msg = "URL list source requires 'url_list' configuration"
+            raise ValueError(msg)
+
+        self._logger.debug("  URLs provided: %d", len(source_config.urls))
+
+        urls = list(source_config.urls)
+        if source_config.shuffle:
+            import random
+
+            random.shuffle(urls)
+
+        # Limit to requested number
+        selected_urls = urls[: config.num_results]
 
         return [
             SearchResult(
-                url=f"https://example.com/reference_{i}.jpg",
-                score=0.9 - (i * 0.1),
-                resolution=(2048, 1536),
-                metadata={"vibe": config.vibe.value},
+                url=url,
+                score=1.0 - (i * 0.01),  # Slight decay by order
+                resolution=(0, 0),  # Unknown until fetched
+                metadata={
+                    "source": "url_list",
+                    "vibe": config.vibe.value,
+                },
             )
-            for i in range(min(config.num_results, 5))
+            for i, url in enumerate(selected_urls)
         ]
 
     async def _analyze_styles(self, references: list[SearchResult]) -> dict[str, Any]:
@@ -589,7 +1429,8 @@ class StyleTransferPipeline(Pipeline):
 
         This is a placeholder - implement with actual upscaling algorithms.
         """
-        from PIL import Image as PILImage, ImageEnhance, ImageFilter
+        from PIL import Image as PILImage
+        from PIL import ImageEnhance, ImageFilter
 
         # Calculate target size
         original_width, original_height = image.size
