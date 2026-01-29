@@ -373,9 +373,9 @@ class StyleTransferPipeline(Pipeline):
         super().__init__(config)
         self._pipeline_config: StyleTransferPipelineConfig | None = None
 
-    def configure(self, config: StyleTransferPipelineConfig) -> None:
+    def configure(self, pipeline_config: StyleTransferPipelineConfig) -> None:
         """Set the pipeline-specific configuration."""
-        self._pipeline_config = config
+        self._pipeline_config = pipeline_config
 
     async def execute(self, ctx: PipelineContext) -> PipelineResult:
         """Execute the style transfer pipeline."""
@@ -720,11 +720,12 @@ class StyleTransferPipeline(Pipeline):
         source_config = config.google_images or GoogleImagesSourceConfig()
 
         # Get API credentials from app config or environment
-        api_key = None
-        search_engine_id = None
+        api_key: str | None = None
+        search_engine_id: str | None = None
 
         if self._config and self._config.app.google_images:
-            api_key = self._config.app.google_images.api_key
+            secret_key = self._config.app.google_images.api_key
+            api_key = secret_key.get_secret_value()
             search_engine_id = self._config.app.google_images.search_engine_id
 
         # Fall back to environment variables (with ${VAR} expansion support)
@@ -831,9 +832,9 @@ class StyleTransferPipeline(Pipeline):
         self._logger.debug("  Include similar products: %s", source_config.include_similar_products)
 
         # Get API key from app config or environment
-        api_key = None
+        api_key: str | None = None
         if self._config and self._config.app.google_images:
-            api_key = self._config.app.google_images.api_key
+            api_key = self._config.app.google_images.api_key.get_secret_value()
 
         if not api_key or api_key.startswith("${"):
             api_key = os.environ.get("GOOGLE_API_KEY")
@@ -972,12 +973,13 @@ class StyleTransferPipeline(Pipeline):
             self._logger.debug("  Category: %s", source_config.category)
 
         # Get KGIZ credentials from app config or environment
-        endpoint = None
-        api_key = None
+        endpoint: str | None = None
+        api_key: str | None = None
 
         if self._config and self._config.app.kgiz:
             endpoint = self._config.app.kgiz.endpoint
-            api_key = self._config.app.kgiz.api_key
+            if self._config.app.kgiz.api_key:
+                api_key = self._config.app.kgiz.api_key.get_secret_value()
 
         if not endpoint or endpoint.startswith("${"):
             endpoint = os.environ.get("KGIZ_ENDPOINT")

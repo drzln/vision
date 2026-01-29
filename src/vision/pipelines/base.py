@@ -131,6 +131,16 @@ class Pipeline(ABC):
         """Set the pipeline configuration."""
         self._config = value
 
+    def configure(self, pipeline_config: Any) -> None:  # noqa: B027
+        """Configure the pipeline with pipeline-specific settings.
+
+        Override this method in subclasses to accept typed configuration.
+        The default implementation does nothing.
+
+        Args:
+            pipeline_config: Pipeline-specific configuration object.
+        """
+
     @abstractmethod
     async def execute(self, ctx: PipelineContext) -> PipelineResult:
         """Execute the pipeline.

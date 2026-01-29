@@ -78,7 +78,9 @@ class PipelineStep(BaseModel):
     on_error: Literal["fail", "skip", "retry"] = Field(
         default="fail", description="Error handling strategy"
     )
-    retry_count: int = Field(default=3, ge=1, le=10, description="Number of retries if on_error=retry")
+    retry_count: int = Field(
+        default=3, ge=1, le=10, description="Number of retries if on_error=retry"
+    )
 
     @field_validator("name")
     @classmethod

@@ -49,8 +49,8 @@ class TestPipelineConfig:
         assert len(pipeline.steps) == 1
 
     def test_empty_steps_rejected(self):
-        """Test that pipelines with no steps are rejected."""
-        with pytest.raises(ValueError, match="at least one step"):
+        """Test that pipelines with no type or steps are rejected."""
+        with pytest.raises(ValueError, match="either 'type' or 'steps' defined"):
             PipelineConfig(name="empty", steps=[])
 
     def test_invalid_pipeline_name(self):
@@ -111,8 +111,9 @@ pipelines:
             ]
         )
 
-        assert config.get_pipeline("pipeline-a") is not None
-        assert config.get_pipeline("pipeline-a").name == "pipeline-a"
+        pipeline_a = config.get_pipeline("pipeline-a")
+        assert pipeline_a is not None
+        assert pipeline_a.name == "pipeline-a"
         assert config.get_pipeline("nonexistent") is None
 
     def test_get_enabled_pipelines(self):

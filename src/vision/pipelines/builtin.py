@@ -11,6 +11,7 @@ from vision.pipelines.base import Pipeline, PipelineResult, PipelineStatus, Step
 from vision.pipelines.registry import register_pipeline
 
 if TYPE_CHECKING:
+    from vision.config import PipelineStep
     from vision.pipelines.base import PipelineContext
 
 
@@ -40,8 +41,6 @@ class GoogleImagesPipeline(Pipeline):
             if ctx.config.app.google_images is None:
                 msg = "Google Images configuration required but not provided"
                 raise ValueError(msg)
-
-            config = ctx.config.app.google_images
 
             # Process each step in the pipeline
             for step in ctx.pipeline_config.steps:
@@ -201,10 +200,10 @@ class YamlDrivenPipeline(Pipeline):
         return result
 
     async def _execute_step(
-        self, ctx: PipelineContext, step: "PipelineStep"
+        self, ctx: PipelineContext, step: PipelineStep
     ) -> StepResult:
         """Execute a single pipeline step."""
-        from vision.config import PipelineStep, StepType
+        from vision.config import StepType
 
         result = StepResult(
             step_name=step.name,
@@ -248,48 +247,52 @@ class YamlDrivenPipeline(Pipeline):
 
         return result
 
-    async def _step_fetch_google(self, ctx: PipelineContext, step: "PipelineStep") -> dict:
+    async def _step_fetch_google(
+        self, ctx: PipelineContext, step: PipelineStep
+    ) -> dict:
         """Fetch images from Google Images API."""
         self._logger.info("Fetching from Google Images: %s", step.params)
         # Implementation placeholder
         return {"fetched": 0, "source": "google"}
 
-    async def _step_fetch_kgiz(self, ctx: PipelineContext, step: "PipelineStep") -> dict:
+    async def _step_fetch_kgiz(
+        self, ctx: PipelineContext, step: PipelineStep
+    ) -> dict:
         """Fetch/process images with KGIZ service."""
         self._logger.info("Processing with KGIZ: %s", step.params)
         # Implementation placeholder
         return {"processed": 0, "source": "kgiz"}
 
-    async def _step_resize(self, ctx: PipelineContext, step: "PipelineStep") -> dict:
+    async def _step_resize(self, ctx: PipelineContext, step: PipelineStep) -> dict:
         """Resize images."""
         width = step.params.get("width", 800)
         height = step.params.get("height", 600)
         self._logger.info("Resizing to %dx%d", width, height)
         return {"width": width, "height": height}
 
-    async def _step_crop(self, ctx: PipelineContext, step: "PipelineStep") -> dict:
+    async def _step_crop(self, ctx: PipelineContext, step: PipelineStep) -> dict:
         """Crop images."""
         self._logger.info("Cropping: %s", step.params)
         return {"cropped": True}
 
-    async def _step_filter(self, ctx: PipelineContext, step: "PipelineStep") -> dict:
+    async def _step_filter(self, ctx: PipelineContext, step: PipelineStep) -> dict:
         """Apply filters to images."""
         filter_name = step.params.get("filter", "none")
         self._logger.info("Applying filter: %s", filter_name)
         return {"filter": filter_name}
 
-    async def _step_transform(self, ctx: PipelineContext, step: "PipelineStep") -> dict:
+    async def _step_transform(self, ctx: PipelineContext, step: PipelineStep) -> dict:
         """Apply transformations to images."""
         self._logger.info("Transforming: %s", step.params)
         return {"transformed": True}
 
-    async def _step_save(self, ctx: PipelineContext, step: "PipelineStep") -> dict:
+    async def _step_save(self, ctx: PipelineContext, step: PipelineStep) -> dict:
         """Save processed images."""
         output_dir = Path(step.params.get("output_dir", ctx.output_dir))
         self._logger.info("Saving to: %s", output_dir)
         return {"output_dir": str(output_dir)}
 
-    async def _step_custom(self, ctx: PipelineContext, step: "PipelineStep") -> dict:
+    async def _step_custom(self, ctx: PipelineContext, step: PipelineStep) -> dict:
         """Execute custom step logic."""
         handler = step.params.get("handler")
         if not handler:
@@ -297,7 +300,3 @@ class YamlDrivenPipeline(Pipeline):
             raise ValueError(msg)
         self._logger.info("Executing custom handler: %s", handler)
         return {"handler": handler, "executed": True}
-
-
-# Type hint import for step execution
-from vision.config import PipelineStep  # noqa: E402

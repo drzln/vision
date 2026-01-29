@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sys
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich import box
@@ -20,7 +19,7 @@ from rich.tree import Tree
 
 from vision import __version__
 from vision.config import VisionConfig
-from vision.pipelines import Pipeline, PipelineContext, PipelineRegistry
+from vision.pipelines import PipelineContext, PipelineRegistry
 from vision.pipelines.base import PipelineStatus
 
 # Rich console for beautiful output
@@ -93,7 +92,7 @@ def load_config(config_path: Path | None) -> VisionConfig:
 @app.callback()
 def main(
     version: Annotated[
-        Optional[bool],
+        bool | None,
         typer.Option(
             "--version",
             "-v",
@@ -113,7 +112,7 @@ def main(
 @app.command()
 def run(
     config_path: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--config",
             "-c",
@@ -123,11 +122,11 @@ def run(
         ),
     ] = None,
     pipeline_name: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--pipeline", "-p", help="Run specific pipeline by name"),
     ] = None,
     output_dir: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option("--output", "-o", help="Output directory for processed images"),
     ] = None,
     dry_run: Annotated[
@@ -149,7 +148,7 @@ def run(
         config = load_config(config_path)
     except Exception as e:
         err_console.print(f"[red bold]Error loading config:[/] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Get pipelines to run
     if pipeline_name:
@@ -200,6 +199,7 @@ def run(
 
             # Map pipeline types to registered pipeline names
             from vision.config import PipelineType
+
             type_to_name = {
                 PipelineType.YAML_DRIVEN: "yaml-driven",
                 PipelineType.STYLE_TRANSFER: "style-transfer",
@@ -220,6 +220,7 @@ def run(
             # For typed pipelines, configure with the config section
             if pipeline_cfg.config and hasattr(pipeline, "configure"):
                 from vision.pipelines.style_transfer import StyleTransferPipelineConfig
+
                 if pipeline_type == PipelineType.STYLE_TRANSFER:
                     typed_config = StyleTransferPipelineConfig.model_validate(pipeline_cfg.config)
                     pipeline.configure(typed_config)
@@ -267,12 +268,16 @@ def _display_results(results: list) -> None:
             PipelineStatus.SKIPPED: "yellow",
         }.get(result.status, "white")
 
+        error_text = result.error or ""
+        if result.error and len(result.error) > 50:
+            error_text = result.error[:50] + "..."
+
         table.add_row(
             result.pipeline_name,
             f"[{status_color}]{result.status.value.upper()}[/]",
             f"{result.successful_steps}/{len(result.step_results)}",
             f"{result.duration_ms:.1f}ms",
-            result.error[:50] + "..." if result.error and len(result.error) > 50 else result.error or "",
+            error_text,
         )
 
     console.print(table)
@@ -295,7 +300,7 @@ def _display_results(results: list) -> None:
 @pipeline_app.command("list")
 def pipeline_list(
     config_path: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option("--config", "-c", help="Path to YAML configuration file"),
     ] = None,
 ) -> None:
@@ -341,7 +346,7 @@ def pipeline_list(
 def pipeline_show(
     name: Annotated[str, typer.Argument(help="Pipeline name to show")],
     config_path: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option("--config", "-c", help="Path to YAML configuration file"),
     ] = None,
 ) -> None:
@@ -428,13 +433,13 @@ def config_validate(
 
     try:
         config = VisionConfig.from_yaml(config_path)
-        console.print(f"[green bold]Configuration is valid.[/]")
+        console.print("[green bold]Configuration is valid.[/]")
         console.print(f"[dim]Loaded {len(config.pipelines)} pipeline(s)[/]")
 
     except Exception as e:
-        err_console.print(f"[red bold]Validation failed:[/]")
+        err_console.print("[red bold]Validation failed:[/]")
         err_console.print(f"  {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @config_app.command("init")
