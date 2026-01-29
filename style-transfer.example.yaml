@@ -1,0 +1,155 @@
+# Style Transfer Pipeline Configuration
+# Finds visually superior references and applies their style to seed images
+version: "1.0"
+
+app:
+  # Google Images API configuration (required for search)
+  google_images:
+    api_key: "${GOOGLE_API_KEY}"
+    search_engine_id: "${GOOGLE_SEARCH_ENGINE_ID}"
+    safe_search: high
+    max_results: 10
+
+  # Optional: KGIZ for advanced style transfer
+  kgiz:
+    endpoint: "https://api.kgiz.example.com"
+    api_key: "${KGIZ_API_KEY}"
+    timeout: 60
+
+  output_dir: ./output
+  log_level: INFO
+
+pipelines:
+  # Example 1: Product Photo Enhancement
+  - name: product-hero-enhancement
+    type: style_transfer
+    description: "Enhance product photos with professional studio aesthetics"
+    enabled: true
+    tags: [product, hero, professional]
+    config:
+      # Input: Your seed image
+      seed_image: ./input/product-raw.jpg
+      output_path: ./output/product-enhanced.png
+
+      # Step 1: The Search
+      search:
+        query: "professional product photography white background studio lighting"
+        num_results: 8
+        vibe: professional  # professional, cinematic, minimalist, editorial, vibrant, moody, natural, studio
+        source: google
+        filter_min_resolution: 1024
+
+      # Step 2: The Refinement
+      refinement:
+        strength: 0.65  # 0.0-1.0, how strongly to apply the style
+        features:
+          - soft_lighting
+          - crisp_edges
+          - color_grading
+        preserve_identity: true
+        blend_mode: adaptive  # adaptive, overlay, soft_light
+
+      # Step 3: The Final Polish
+      polish:
+        enabled: true
+        output_width: 2400
+        # output_height: null  # null = maintain aspect ratio
+        sharpening: 0.35
+        denoise: true
+
+      # Debug options
+      save_intermediates: false
+      # intermediate_dir: ./output/debug
+
+  # Example 2: Cinematic Portrait
+  - name: cinematic-portrait
+    type: style_transfer
+    description: "Apply cinematic film look to portraits"
+    enabled: true
+    tags: [portrait, cinematic, film]
+    config:
+      seed_image: ./input/portrait.jpg
+      output_path: ./output/portrait-cinematic.png
+
+      search:
+        query: "cinematic portrait photography film grain dramatic lighting"
+        num_results: 5
+        vibe: cinematic
+        source: google
+
+      refinement:
+        strength: 0.8
+        features:
+          - dramatic_shadows
+          - color_grading
+          - bokeh
+        preserve_identity: true
+        blend_mode: soft_light
+
+      polish:
+        enabled: true
+        output_width: 1920
+        sharpening: 0.2
+        denoise: false  # Keep film grain
+
+  # Example 3: Minimalist UI Screenshot
+  - name: ui-screenshot-clean
+    type: style_transfer
+    description: "Clean up UI screenshots with minimalist aesthetic"
+    enabled: true
+    tags: [ui, screenshot, minimalist]
+    config:
+      seed_image: ./input/screenshot.png
+      output_path: ./output/screenshot-clean.png
+
+      search:
+        query: "minimalist UI design clean interface professional app screenshot"
+        num_results: 5
+        vibe: minimalist
+        source: google
+
+      refinement:
+        strength: 0.5
+        features:
+          - crisp_edges
+          - high_contrast
+          - sharpness
+        preserve_identity: true
+        blend_mode: overlay
+
+      polish:
+        enabled: true
+        output_width: 3840  # 4K
+        sharpening: 0.5
+        denoise: true
+
+  # Example 4: Moody Food Photography
+  - name: food-moody
+    type: style_transfer
+    description: "Dark, moody aesthetic for food photography"
+    enabled: false  # Disabled by default
+    tags: [food, moody, dark]
+    config:
+      seed_image: ./input/food-raw.jpg
+      output_path: ./output/food-moody.png
+
+      search:
+        query: "dark moody food photography dramatic shadows rustic"
+        num_results: 6
+        vibe: moody
+        source: google
+
+      refinement:
+        strength: 0.75
+        features:
+          - dramatic_shadows
+          - texture_detail
+          - color_grading
+        preserve_identity: true
+        blend_mode: adaptive
+
+      polish:
+        enabled: true
+        output_width: 2048
+        sharpening: 0.3
+        denoise: true
